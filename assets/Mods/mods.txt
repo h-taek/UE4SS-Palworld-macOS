@@ -1,0 +1,4 @@
+; UE4SS mod enable list.
+; On this macOS port, mods are enabled via a per-mod `enabled.txt` marker file
+; (the staging script copies enabled mods into the sandbox container, leaving this
+; file empty). Add `ModName : 1` lines here only if you rely on the legacy list mode.

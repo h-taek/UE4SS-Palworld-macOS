@@ -1,0 +1,1 @@
+PmmLuaProbe enabled — Lua bring-up smoke test (Plan 04). 내용은 무시되고 파일 존재만으로 enable.
