@@ -1,11 +1,11 @@
 // test_ps_scan_darwin.cpp — 단위테스트: Mach-O LC_SYMTAB 심볼 리졸버 검증
-// 게임 없이 동작. 팔월드 바이너리(/Applications/Palworld.app/Contents/MacOS/Palworld) 필요.
+// UE4SS_PS_SCAN_REFERENCE_MACHO 로 지정한 Mach-O fixture가 있을 때 심볼 대조를 수행한다.
 // make test 로 실행.
 //
 // 검증 전략:
-//   1. resolve_macho_symbol()로 Palworld 바이너리에서 심볼 파일VM 주소를 파싱
-//   2. nm -arch arm64로 사전 확정한 기준값과 비교 (게임 업데이트 가능 — 주소 불일치 시 경고)
-//   3. 현재 nm 값과 일치하면 PASS, 불일치면 구버전 바이너리 가능성 경고 후 FAIL
+//   1. resolve_macho_symbol()로 fixture 바이너리에서 심볼 파일VM 주소를 파싱
+//   2. 필요한 UE 앵커 심볼을 찾을 수 있으면 PASS
+//   3. fixture 미지정 시 SKIP(exit 0)
 
 #include <cstdio>
 #include <cstdint>
@@ -24,7 +24,7 @@
 
 // ── Mach-O LC_SYMTAB 파서 ──────────────────────────────────────────────────
 //
-// 팔월드 바이너리(fat binary, arm64 슬라이스)에서 심볼 파일VM 주소를 반환.
+// Mach-O 바이너리(fat binary, arm64 슬라이스)에서 심볼 파일VM 주소를 반환.
 // 심볼을 못 찾으면 0 반환.
 // 주의: 로컬 심볼(lowercase t/s)도 포함 — dlsym 불가능하지만 여기선 직접 파싱.
 
@@ -105,7 +105,7 @@ static uint64_t resolve_macho_symbol(const char* binary_path, const char* symbol
     }
 
     // 5. nlist_64 + strtab 포인터 (파일 오프셋 기준)
-    //    팔월드는 단일-아치 슬라이스가 fat 내 오프셋에 위치 →
+    //    단일-아치 슬라이스가 fat 내 오프셋에 위치 →
     //    symoff/stroff 는 해당 Mach-O 슬라이스의 내부 파일 오프셋이므로
     //    "슬라이스 시작"에서 더해야 한다.
     const struct nlist_64* syms = (const struct nlist_64*)(macho_start + symtab->symoff);
@@ -128,81 +128,62 @@ static uint64_t resolve_macho_symbol(const char* binary_path, const char* symbol
     return 0;
 }
 
-// ── nm으로 사전 확정한 파일VM 주소 기준값 ─────────────────────────────────
-// 팔월드 게임 업데이트 시 주소는 바뀌지만 심볼명은 유지 예상.
-// 불일치 = 바이너리 업데이트 감지 → 경고. 리졸버 자체 버그는 아님.
-// (nm -arch arm64 /Applications/Palworld.app/Contents/MacOS/Palworld 기준 2026-06-22)
+// ── 공식 fixture에서 확인해야 할 UE 앵커 심볼 ───────────────────────────────
 static const struct {
     const char* mangled;
-    uint64_t    nm_addr;
     const char* description;
 } k_symbols[] = {
     { "_GUObjectArray",
-      0x108e03b10ULL,
       "GUObjectArray (global UObject 배열)" },
     { "__ZNK5FName8ToStringER7FString",
-      0x103803844ULL,
       "FName::ToString(FString&) const" },
     { "__ZN5FNameC1EPKDs9EFindName",
-      0x103802628ULL,
       "FName::FName(const char16_t*, EFindName)" },
     { "_GMalloc",
-      0x108dd5490ULL,
       "GMalloc (FMalloc* 전역)" },
     { "__Z30StaticConstructObject_InternalRK32FStaticConstructObjectParameters",
-      0x1039f8668ULL,
       "StaticConstructObject_Internal(...)" },
     { "__ZN5FTextC2EO7FString",
-      0x1036e4a98ULL,
       "FText::FText(FString&&)" },
 };
-
-static const char* k_palworld_path =
-    "/Applications/Palworld.app/Contents/MacOS/Palworld";
 
 int main()
 {
     printf("=== test_ps_scan_darwin ===\n");
-    printf("바이너리: %s\n\n", k_palworld_path);
 
-    // 바이너리 접근 가능 여부 먼저 확인
-    if (access(k_palworld_path, R_OK) != 0) {
-        printf("SKIP: 팔월드 바이너리 없음 (%s)\n", strerror(errno));
-        // CI 환경에선 SKIP 허용 — exit 0
+    const char* fixture_path = getenv("UE4SS_PS_SCAN_REFERENCE_MACHO");
+    if (!fixture_path || !fixture_path[0]) {
+        printf("SKIP: UE4SS_PS_SCAN_REFERENCE_MACHO 미설정\n");
+        return 0;
+    }
+    printf("바이너리: %s\n\n", fixture_path);
+
+    if (access(fixture_path, R_OK) != 0) {
+        printf("SKIP: fixture 읽기 실패 (%s)\n", strerror(errno));
         return 0;
     }
 
-    int pass = 0, fail = 0, warn = 0;
+    int pass = 0, fail = 0;
     const int n = (int)(sizeof(k_symbols) / sizeof(k_symbols[0]));
 
     for (int i = 0; i < n; i++) {
-        uint64_t got = resolve_macho_symbol(k_palworld_path, k_symbols[i].mangled);
+        uint64_t got = resolve_macho_symbol(fixture_path, k_symbols[i].mangled);
         if (got == 0) {
             printf("FAIL [%d] %s\n     심볼 찾기 실패: %s\n",
                    i+1, k_symbols[i].description, k_symbols[i].mangled);
             fail++;
-        } else if (got == k_symbols[i].nm_addr) {
-            printf("PASS [%d] %s\n     주소=0x%llx (기준값 일치)\n",
+        } else {
+            printf("PASS [%d] %s\n     주소=0x%llx (심볼 발견)\n",
                    i+1, k_symbols[i].description, (unsigned long long)got);
             pass++;
-        } else {
-            // 주소 불일치: 바이너리 업데이트 가능성. 심볼은 찾았으므로 기능은 OK.
-            printf("WARN [%d] %s\n     got=0x%llx  expected=0x%llx  (바이너리 업데이트? 심볼명은 OK)\n",
-                   i+1, k_symbols[i].description,
-                   (unsigned long long)got, (unsigned long long)k_symbols[i].nm_addr);
-            warn++;
         }
     }
 
-    printf("\n결과: PASS=%d WARN=%d FAIL=%d / 총 %d\n", pass, warn, fail, n);
+    printf("\n결과: PASS=%d FAIL=%d / 총 %d\n", pass, fail, n);
 
     if (fail > 0) {
         printf("테스트 FAILED — 리졸버 버그 또는 심볼명 불일치\n");
         return 1;
-    }
-    if (warn > 0) {
-        printf("테스트 WARN — 심볼 해결 OK, 주소 기준값이 업데이트됨 (정상)\n");
-        return 0;  // 심볼 찾기 자체는 성공
     }
     printf("테스트 PASSED\n");
     return 0;

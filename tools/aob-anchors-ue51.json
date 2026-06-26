@@ -1,0 +1,46 @@
+{
+  "engine_version": "5.1",
+  "platform": "macos-arm64-monolithic",
+  "anchors": [
+    {
+      "name": "FName::ToString",
+      "kind": "function",
+      "symbol": "__ZNK5FName8ToStringER7FString"
+    },
+    {
+      "name": "FName::FName",
+      "kind": "function",
+      "symbol": "__ZN5FNameC1EPKDs9EFindName"
+    },
+    {
+      "name": "StaticConstructObject_Internal",
+      "kind": "function",
+      "symbol": "__Z30StaticConstructObject_InternalRK32FStaticConstructObjectParameters"
+    },
+    {
+      "name": "FText::FText",
+      "kind": "function",
+      "symbol": "__ZN5FTextC2EO7FString"
+    },
+    {
+      "name": "GUObjectArray",
+      "kind": "global_adrp",
+      "symbol": "_GUObjectArray"
+    },
+    {
+      "name": "GMalloc",
+      "kind": "global_adrp",
+      "symbol": "_GMalloc"
+    },
+    {
+      "name": "UObject::ProcessInternal",
+      "kind": "function",
+      "symbol": "__ZN7UObject15ProcessInternalEPS_R6FFramePv"
+    },
+    {
+      "name": "ProcessLocalScriptFunction",
+      "kind": "function",
+      "symbol": "__Z26ProcessLocalScriptFunctionP7UObjectR6FFramePv"
+    }
+  ]
+}

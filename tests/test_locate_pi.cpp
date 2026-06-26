@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include "hook/arm64_reloc.hpp"
 #include <fcntl.h>
@@ -95,18 +96,18 @@ int main() {
         if (!ok) failures++;
     }
 
-    // case 6(REAL): 실 게임 바이너리 __text 를 매핑해 ProcessInternal 파일포인터에서
+    // case 6(REAL): 지정된 fixture __text 를 매핑해 ProcessInternal 파일포인터에서
     // walk 실행 → 결과가 PLSF 심볼주소(파일포인터 환산)와 일치하는지 검증.
     // __text 내부에서는 파일 레이아웃과 VM 레이아웃의 상대오프셋이 동일하므로,
     // cs_disasm 에 파일포인터를 주소로 넘기면 분기 타깃도 파일포인터로 나온다.
     {
-        const char* k_game = "/Applications/Palworld.app/Contents/MacOS/Palworld";
+        const char* fixture = getenv("UE4SS_LOCATE_PI_REFERENCE_MACHO");
         const char* PI_SYM   = "__ZN7UObject15ProcessInternalEPS_R6FFramePv";
         const char* PLSF_SYM  = "__Z26ProcessLocalScriptFunctionP7UObjectR6FFramePv";
 
-        int fd = open(k_game, O_RDONLY);
+        int fd = fixture && fixture[0] ? open(fixture, O_RDONLY) : -1;
         if (fd < 0) {
-            printf("test_locate_pi(walk-real): SKIP (게임 바이너리 없음)\n");
+            printf("test_locate_pi(walk-real): SKIP (UE4SS_LOCATE_PI_REFERENCE_MACHO 미설정 또는 읽기 실패)\n");
         } else {
             struct stat st; fstat(fd, &st);
             size_t fsize = (size_t)st.st_size;

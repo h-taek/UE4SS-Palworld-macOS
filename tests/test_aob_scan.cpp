@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <vector>
 #include "darwin/module.hpp"
 #include "darwin/aob_scan.hpp"   // Task 2에서 채움
@@ -26,7 +27,9 @@ __attribute__((noinline)) static int aob_rt_probe_target(int a, int b) {
     return x ^ 0x5a5a;
 }
 
-static const char* k_game = "/Applications/Palworld.app/Contents/MacOS/Palworld";
+static const char* reference_macho_path() {
+    return getenv("UE4SS_AOB_REFERENCE_MACHO");
+}
 
 // 파일에서 __text [ptr,size,vmaddr] + 심볼주소 조회 (대조 오라클).
 struct MachoFile { const uint8_t* base=nullptr; size_t fsize=0; const uint8_t* macho=nullptr; };
@@ -214,8 +217,16 @@ static void test_plsf_anchor() {
 }
 
 static void test_aob_vs_symbol() {
+    const char* ref = reference_macho_path();
+    if (!ref || !ref[0]) {
+        printf("test_aob_scan(aob_vs_symbol) => SKIP (UE4SS_AOB_REFERENCE_MACHO 미설정)\n");
+        return;
+    }
     MachoFile m;
-    if (!map_macho(k_game, m)) { printf("test_aob_scan(aob_vs_symbol) => SKIP (게임 없음)\n"); return; }
+    if (!map_macho(ref, m)) {
+        printf("test_aob_scan(aob_vs_symbol) => SKIP (fixture 읽기 실패: %s)\n", ref);
+        return;
+    }
     const uint8_t* text=nullptr; size_t tsize=0; uintptr_t tvm=0;
     if (!file_text(m, &text, &tsize, &tvm)) { check(false, "aob_vs_symbol_text"); return; }
     size_t n=0; const mac::AnchorSig* tbl = mac::anchor_table(&n);
