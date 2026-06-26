@@ -162,7 +162,21 @@ def is_pcrel(word: int) -> bool:
 def masked_count(data: bytes, lo: int, hi: int, pat: bytes | bytearray, mask: bytes | bytearray) -> int:
     count = 0
     plen = len(pat)
-    for i in range(lo, hi - plen + 1):
+    if plen == 0 or hi - lo < plen:
+        return 0
+
+    anchor = next((i for i, m in enumerate(mask) if m), None)
+    if anchor is None:
+        return max(0, hi - lo - plen + 1)
+
+    pos = lo + anchor
+    end = hi - plen + anchor
+    needle = bytes([pat[anchor]])
+    while pos <= end:
+        hit = data.find(needle, pos, end + 1)
+        if hit < 0:
+            break
+        i = hit - anchor
         ok = True
         for j in range(plen):
             if mask[j] and (data[i + j] & mask[j]) != (pat[j] & mask[j]):
@@ -170,6 +184,7 @@ def masked_count(data: bytes, lo: int, hi: int, pat: bytes | bytearray, mask: by
                 break
         if ok:
             count += 1
+        pos = hit + 1
     return count
 
 
@@ -198,3 +213,90 @@ def fixture_metadata(path: str, data: bytes, text: TextSection) -> dict:
 
 def write_json(path: str, payload: dict) -> None:
     Path(path).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def derive_function_record(path: str, data: bytes, symbol: str, max_instr: int = 15) -> dict:
+    text = text_section(data)
+    addr = find_symbol(data, symbol)
+    if not (text.vmaddr <= addr < text.vmaddr + text.size):
+        raise SystemExit(f"심볼이 __text 범위 밖에 있음: {symbol} addr=0x{addr:x}")
+
+    foff = text.slice_base + text.fileoff + (addr - text.vmaddr)
+    tlo = text.slice_base + text.fileoff
+    thi = tlo + text.size
+    pat, mask = bytearray(), bytearray()
+    for k in range(1, max_instr + 1):
+        word = struct.unpack_from("<I", data, foff + (k - 1) * 4)[0]
+        b = data[foff + (k - 1) * 4:foff + k * 4]
+        if is_pcrel(word):
+            pat += bytes(4)
+            mask += bytes(4)
+        else:
+            pat += b
+            mask += b"\xff\xff\xff\xff"
+        count = masked_count(data, tlo, thi, pat, mask)
+        if count == 1:
+            return {
+                "kind": "function",
+                "symbol": symbol,
+                "address": f"0x{addr:x}",
+                "instruction_count": k,
+                "matches": count,
+                "signature": format_sig(pat, mask),
+                "fixture": fixture_metadata(path, data, text),
+            }
+    raise SystemExit(f"{max_instr}명령으로도 유일 안 됨: {symbol}")
+
+
+def adrp_decode(word: int, pc: int) -> int:
+    immlo = (word >> 29) & 3
+    immhi = (word >> 5) & 0x7ffff
+    imm = (immhi << 2) | immlo
+    if imm & (1 << 20):
+        imm -= (1 << 21)
+    return (pc & ~0xfff) + (imm << 12)
+
+
+def derive_global_adrp_record(path: str, data: bytes, symbol: str, max_instr: int = 15) -> dict:
+    text = text_section(data)
+    target = find_symbol(data, symbol)
+    tlo = text.slice_base + text.fileoff
+    thi = tlo + text.size
+    for off in range(tlo, thi - 8, 4):
+        w0 = struct.unpack_from("<I", data, off)[0]
+        if (w0 & 0x9f000000) != 0x90000000:
+            continue
+        pc = text.vmaddr + (off - tlo)
+        page = adrp_decode(w0, pc)
+        w1 = struct.unpack_from("<I", data, off + 4)[0]
+        if (w1 & 0xff800000) == 0x91000000:
+            formed = page + ((w1 >> 10) & 0xfff)
+        elif (w1 & 0xffc00000) == 0xf9400000:
+            formed = page + (((w1 >> 10) & 0xfff) << 3)
+        else:
+            continue
+        if formed != target:
+            continue
+
+        pat, mask = bytearray(b"\0\0\0\0"), bytearray(b"\0\0\0\0")
+        for k in range(2, max_instr + 1):
+            word = struct.unpack_from("<I", data, off + (k - 1) * 4)[0]
+            b = data[off + (k - 1) * 4:off + k * 4]
+            if is_pcrel(word):
+                pat += bytes(4)
+                mask += bytes(4)
+            else:
+                pat += b
+                mask += b"\xff\xff\xff\xff"
+            if masked_count(data, tlo, thi, pat, mask) == 1:
+                return {
+                    "kind": "global_adrp",
+                    "symbol": symbol,
+                    "target": f"0x{target:x}",
+                    "reference_pc": f"0x{pc:x}",
+                    "instruction_count": k,
+                    "matches": 1,
+                    "signature": format_sig(pat, mask),
+                    "fixture": fixture_metadata(path, data, text),
+                }
+    raise SystemExit(f"유일 ADRP 사이트 못 만듦: {symbol}")

@@ -5,24 +5,12 @@
 #        윈도우로 잡고(ADRP 4B 는 ?? 마스킹) 유일해질 때까지 확장.
 # 사용: python3 tools/derive-aob-global.py --macho <fixture> _GUObjectArray
 import argparse
-import struct
 
 from aob_macho import (
-    find_symbol,
-    fixture_metadata,
-    format_sig,
-    is_pcrel,
-    masked_count,
+    derive_global_adrp_record,
     read_file,
-    text_section,
     write_json,
 )
-
-def adrp_decode(word, pc):
-    immlo = (word >> 29) & 3; immhi = (word >> 5) & 0x7ffff
-    imm = (immhi << 2) | immlo
-    if imm & (1 << 20): imm -= (1 << 21)
-    return (pc & ~0xfff) + (imm << 12)
 
 def main():
     ap = argparse.ArgumentParser(description="arm64 전역 참조 ADRP AOB 도출")
@@ -34,48 +22,14 @@ def main():
 
     sym = args.symbol
     data = read_file(args.macho)
-    text = text_section(data)
-    target = find_symbol(data, sym)
-    tlo = text.slice_base + text.fileoff
-    thi = tlo + text.size
-    for off in range(tlo, thi - 8, 4):
-        w0 = struct.unpack_from("<I", data, off)[0]
-        if (w0 & 0x9f000000) != 0x90000000: continue      # ADRP?
-        pc = text.vmaddr + (off - tlo)
-        page = adrp_decode(w0, pc)
-        w1 = struct.unpack_from("<I", data, off+4)[0]
-        if (w1 & 0xff800000) == 0x91000000:                # ADD imm
-            formed = page + ((w1 >> 10) & 0xfff)
-        elif (w1 & 0xffc00000) == 0xf9400000:              # LDR imm
-            formed = page + (((w1 >> 10) & 0xfff) << 3)
-        else:
-            continue
-        if formed != target: continue
-        # 이 사이트에서 ADRP(??) 시작으로 윈도우 확장 → 유일 시그니처
-        pat, mask = bytearray(b"\0\0\0\0"), bytearray(b"\0\0\0\0")   # ADRP 마스킹
-        for k in range(2, args.max_instr + 1):
-            word = struct.unpack_from("<I", data, off + (k-1)*4)[0]
-            b = data[off + (k-1)*4 : off + k*4]
-            if is_pcrel(word): pat += bytes(4); mask += bytes(4)
-            else: pat += b; mask += b"\xff\xff\xff\xff"
-            if masked_count(data, tlo, thi, pat, mask) == 1:
-                sig = format_sig(pat, mask)
-                record = {
-                    "kind": "global_adrp",
-                    "symbol": sym,
-                    "target": f"0x{target:x}",
-                    "reference_pc": f"0x{pc:x}",
-                    "instruction_count": k,
-                    "matches": 1,
-                    "signature": sig,
-                    "fixture": fixture_metadata(args.macho, data, text),
-                }
-                if args.out:
-                    write_json(args.out, record)
-                print(f"# {sym} via ADRP@{pc:#x} -> {target:#x} instrs={k} matches=1")
-                print(sig)
-                return
-    raise SystemExit(f"유일 ADRP 사이트 못 만듦: {sym}  (폴백: 심볼 유지)")
+    record = derive_global_adrp_record(args.macho, data, sym, args.max_instr)
+    if args.out:
+        write_json(args.out, record)
+    print(
+        f"# {sym} via ADRP@{record['reference_pc']} -> {record['target']} "
+        f"instrs={record['instruction_count']} matches={record['matches']}"
+    )
+    print(record["signature"])
 
 if __name__ == "__main__":
     main()
