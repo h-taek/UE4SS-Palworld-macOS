@@ -83,6 +83,7 @@ vsxmake2022
 
 # Local probe tooling (not part of the repo)
 /tmp/
+/dist/
 .agentbridge/
 .codex/
 .superpowers/
@@ -97,4 +98,3 @@ HANDOFF.md
 
 # xmake local config
 .xmake/
- 

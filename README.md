@@ -30,8 +30,8 @@ This is validated on **one sample (Palworld, n=1)**. It is **not yet a generic U
 - **GUI subsystem is disabled** (built with `--ue4ssUI=None`).
 - **macOS key-input backend is not ported** → `RegisterKeyBind` is unavailable. Trigger Lua via
   event hooks instead.
-- **Out of scope:** game discovery, the launcher/injector, mod install/enable/update, and any mod
-  manager UI. Those belong to a separate repository.
+- **Out of scope:** game discovery, a product-grade launcher/injector, mod install/enable/update,
+  and any mod manager UI. This repository only keeps experimental and minimal packaging scripts.
 
 ## Requirements
 
@@ -62,6 +62,52 @@ xmake build -P . -j4 UE4SS
 
 Injection requires launching through the script (Spotlight / double-click will not inject).
 UE4SS runtime data (logs, Mods, settings) lives in the game's sandbox container, not in this repo.
+
+### Minimum launch package layout
+
+The minimal pre-zip package is generated under `dist/UE4SS_mac/`:
+
+```sh
+./tools/package-ue4ss-mac.sh --zip
+```
+
+After the user receives that folder, running `launch-palworld.command` performs a basic preflight
+(arm64 check, dylib/settings/mod files, Palworld sandbox container, dylib dependencies, ad-hoc
+signing). If it passes, the script first copies the packaged settings/mod files into the Palworld
+sandbox container, then injects only `libUE4SS.dylib` into the game process.
+
+Package folder:
+
+```text
+dist/UE4SS_mac/
+  launch-palworld.command
+  libUE4SS.dylib
+  UE4SS/
+    UE4SS-settings.ini
+    Mods/
+      mods.txt
+```
+
+Runtime layout created in the Palworld container when the launcher runs:
+
+```text
+~/Library/Containers/com.pocketpair.palworld.mac/Data/UE4SS/
+  UE4SS-settings.ini
+  Mods/
+    mods.txt
+```
+
+`launch-palworld.command` injects only the package's `libUE4SS.dylib`:
+
+```sh
+DYLD_INSERT_LIBRARIES="$PACKAGE_DIR/libUE4SS.dylib" \
+  /Applications/Palworld.app/Contents/MacOS/Palworld
+```
+
+After the dylib is loaded inside the game process, UE4SS uses `$HOME/UE4SS` as its working
+directory. In the Palworld sandbox environment, that resolves to the container `Data/UE4SS` path
+above, where UE4SS reads `UE4SS-settings.ini` and `Mods/`. To include mods in the package, place
+them under `dist/UE4SS_mac/UE4SS/Mods/<ModName>/`.
 
 ## Mods
 

@@ -27,7 +27,8 @@ Lua 모드가 **게임 `UFunction`을 후킹·호출해 실제 게임 상태를 
   디스어셈블로 macOS 교정했지만, 나머지는 ABI 우연으로 맞는 리눅스 값이며 맥에서 미검증이다.
 - **GUI 서브시스템 비활성**(`--ue4ssUI=None` 빌드).
 - **macOS 키 입력 백엔드 미포팅** → `RegisterKeyBind` 사용 불가. Lua는 이벤트 후킹으로 트리거한다.
-- **범위 밖:** 게임 탐색, 런처/주입 실행기, 모드 설치·활성화·업데이트, 모드 매니저 UI. 이들은 별도 저장소 소관이다.
+- **범위 밖:** 게임 탐색, 제품형 런처/주입 실행기, 모드 설치·활성화·업데이트, 모드 매니저 UI.
+  이 레포에는 실험과 최소 배포용 스크립트만 둔다.
 
 ## 요구 사항
 
@@ -58,6 +59,52 @@ xmake build -P . -j4 UE4SS
 
 주입은 반드시 스크립트로 실행한다(Spotlight·더블클릭으로는 주입 안 됨).
 UE4SS 런타임 데이터(로그·Mods·설정)는 이 레포가 아니라 게임 샌드박스 컨테이너에 위치한다.
+
+### 게임 실행용 최소 배포물 구조
+
+압축 배포 전 최소 패키지는 `tools/package-ue4ss-mac.sh`로 `dist/UE4SS_mac/`에 생성한다.
+
+```sh
+./tools/package-ue4ss-mac.sh --zip
+```
+
+사용자가 이 폴더를 받은 뒤 `launch-palworld.command`를 실행하면, 스크립트가 기본 preflight
+(arm64 여부, dylib/설정/모드 파일 존재, Palworld 샌드박스 컨테이너, dylib 의존성, ad-hoc 서명)를
+확인한다. 통과하면 패키지 안의 설정/모드 파일을 Palworld 샌드박스 컨테이너로 먼저 복사하고,
+그 다음 `libUE4SS.dylib`만 게임 프로세스에 주입한다.
+
+배포 폴더:
+
+```text
+dist/UE4SS_mac/
+  launch-palworld.command
+  libUE4SS.dylib
+  UE4SS/
+    UE4SS-settings.ini
+    Mods/
+      mods.txt
+```
+
+실행 시 스크립트가 만드는 Palworld 컨테이너 쪽 런타임 배치:
+
+```text
+~/Library/Containers/com.pocketpair.palworld.mac/Data/UE4SS/
+  UE4SS-settings.ini
+  Mods/
+    mods.txt
+```
+
+`launch-palworld.command`가 주입하는 것은 패키지 안의 `libUE4SS.dylib` 하나다.
+
+```sh
+DYLD_INSERT_LIBRARIES="$PACKAGE_DIR/libUE4SS.dylib" \
+  /Applications/Palworld.app/Contents/MacOS/Palworld
+```
+
+그 뒤 게임 프로세스 안에서 로드된 UE4SS가 `$HOME/UE4SS`를 작업 디렉터리로 잡고,
+Palworld 샌드박스 환경에서는 이 경로가 위 컨테이너의 `Data/UE4SS`로 해석되어
+`UE4SS-settings.ini`와 `Mods/`를 읽는다. 모드를 배포물에 포함하려면
+`dist/UE4SS_mac/UE4SS/Mods/<ModName>/` 아래에 넣으면 된다.
 
 ## 모드
 
