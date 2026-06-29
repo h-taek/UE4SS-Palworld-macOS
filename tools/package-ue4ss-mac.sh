@@ -10,6 +10,12 @@ OUT_DIR="$PROJECT_ROOT/dist/UE4SS_mac"
 DYLIB="$PROJECT_ROOT/Binaries/Game__Shipping__Mac/UE4SS/libUE4SS.dylib"
 MAKE_ZIP=0
 
+# Single source of truth for the loader version (see docs/spec/02). The manager
+# (03_PalworldModManager) derives the release version from the git tag, but we
+# also embed version.txt in the package for traceability and bundle-sync.
+VERSION_FILE="$PROJECT_ROOT/VERSION"
+VERSION="$( [ -f "$VERSION_FILE" ] && tr -d '[:space:]' < "$VERSION_FILE" || echo "0.0.0" )"
+
 usage() {
     cat <<'USAGE'
 Usage: tools/package-ue4ss-mac.sh [--dylib PATH] [--out-dir PATH] [--zip]
@@ -18,6 +24,7 @@ Creates:
   dist/UE4SS_mac/
     launch-palworld.command
     libUE4SS.dylib
+    version.txt
     UE4SS/
       UE4SS-settings.ini
       Mods/
@@ -109,6 +116,9 @@ else
     touch "$OUT_DIR/UE4SS/Mods/mods.txt"
 fi
 
+# Embed the loader version next to the dylib so the package is self-describing.
+printf '%s\n' "$VERSION" > "$OUT_DIR/version.txt"
+
 if command -v codesign >/dev/null 2>&1; then
     codesign -s - --force --timestamp=none "$OUT_DIR/libUE4SS.dylib" >/dev/null
 fi
@@ -124,3 +134,4 @@ if [ "$MAKE_ZIP" -eq 1 ]; then
 fi
 
 echo "WROTE $OUT_DIR"
+echo "VERSION $VERSION"

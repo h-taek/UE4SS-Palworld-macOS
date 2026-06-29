@@ -1,13 +1,17 @@
-# UE4SS — macOS Port (Apple Silicon / arm64)
+# UE4SS for Palworld — macOS Port (Apple Silicon / arm64)
 
 *[한국어 README](README.ko.md)*
 
-A native **macOS arm64** port of [RE-UE4SS](https://github.com/UE4SS-RE/RE-UE4SS).
-It reuses the UE4SS "brain" (Unreal Engine reflection + Lua scripting) and rewrites the
-"hands" — dylib injection, arm64 inline hooking, and Mach-O symbol resolution — for Apple Silicon.
+A native **macOS arm64** port of [RE-UE4SS](https://github.com/UE4SS-RE/RE-UE4SS), **targeted at
+macOS-native Palworld** (App Store, Apple Silicon, UE5.1). It reuses the UE4SS "brain" (Unreal
+Engine reflection + Lua scripting) and rewrites the "hands" — dylib injection, arm64 inline hooking,
+and Mach-O symbol resolution — for Apple Silicon.
 
 This is **not** WINE, Rosetta, or emulation: a native arm64 dylib is injected directly into the
 native game process.
+
+This loader is the runtime consumed by the **Palworld Mod Manager** app, which downloads it from
+this repo's GitHub releases. See **Releases** below.
 
 ## Status
 
@@ -108,6 +112,24 @@ After the dylib is loaded inside the game process, UE4SS uses `$HOME/UE4SS` as i
 directory. In the Palworld sandbox environment, that resolves to the container `Data/UE4SS` path
 above, where UE4SS reads `UE4SS-settings.ini` and `Mods/`. To include mods in the package, place
 them under `dist/UE4SS_mac/UE4SS/Mods/<ModName>/`.
+
+## Releases
+
+The Palworld Mod Manager consumes this loader from GitHub releases. The release contract is fixed:
+
+- Version source of truth: the `VERSION` file at the repo root (semver `X.Y.Z`).
+- Each release is tagged `vX.Y.Z` and carries a single asset named **`UE4SS_mac.zip`** whose payload
+  contains `UE4SS_mac/libUE4SS.dylib`.
+
+Cut a release with:
+
+```sh
+./tools/release.sh --dry-run   # build + zip only, no publish
+./tools/release.sh             # tag vX.Y.Z + publish UE4SS_mac.zip to GitHub
+```
+
+Bump `VERSION` before publishing; `release.sh` refuses to clobber an existing tag unless
+`--replace` is passed.
 
 ## Mods
 

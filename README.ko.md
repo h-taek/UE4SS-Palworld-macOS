@@ -1,12 +1,16 @@
-# UE4SS — macOS 포팅 (Apple Silicon / arm64)
+# Palworld용 UE4SS — macOS 포팅 (Apple Silicon / arm64)
 
 *[English README](README.md)*
 
-[RE-UE4SS](https://github.com/UE4SS-RE/RE-UE4SS)의 **macOS arm64 네이티브 포팅**이다.
+[RE-UE4SS](https://github.com/UE4SS-RE/RE-UE4SS)의 **macOS arm64 네이티브 포팅**이며,
+**macOS 네이티브 Palworld(App Store, Apple Silicon, UE5.1)를 대상으로 한다.**
 UE4SS의 "두뇌"(Unreal Engine 리플렉션 + Lua 스크립팅)는 재사용하고, "손발" — dylib 주입,
 arm64 인라인 후킹, Mach-O 심볼 해석 — 만 Apple Silicon용으로 재작성했다.
 
 WINE·Rosetta·에뮬레이션이 **아니다**. 네이티브 arm64 dylib을 네이티브 게임 프로세스에 직접 주입한다.
+
+이 로더는 **Palworld Mod Manager** 앱이 쓰는 런타임이다. 매니저가 이 레포의 GitHub 릴리즈에서
+내려받는다. 아래 **릴리즈** 항목을 참고한다.
 
 ## 현재 단계
 
@@ -105,6 +109,23 @@ DYLD_INSERT_LIBRARIES="$PACKAGE_DIR/libUE4SS.dylib" \
 Palworld 샌드박스 환경에서는 이 경로가 위 컨테이너의 `Data/UE4SS`로 해석되어
 `UE4SS-settings.ini`와 `Mods/`를 읽는다. 모드를 배포물에 포함하려면
 `dist/UE4SS_mac/UE4SS/Mods/<ModName>/` 아래에 넣으면 된다.
+
+## 릴리즈
+
+Palworld Mod Manager가 이 로더를 GitHub 릴리즈에서 받아 쓴다. 릴리즈 계약은 고정이다.
+
+- 버전 단일 진실원: 레포 루트의 `VERSION` 파일(semver `X.Y.Z`).
+- 각 릴리즈는 `vX.Y.Z` 태그를 달고, **`UE4SS_mac.zip`** 자산 하나를 싣는다. 그 안에
+  `UE4SS_mac/libUE4SS.dylib`가 들어 있다.
+
+릴리즈 발행:
+
+```sh
+./tools/release.sh --dry-run   # 빌드·zip만, 발행 안 함
+./tools/release.sh             # 태그 vX.Y.Z + UE4SS_mac.zip을 GitHub에 발행
+```
+
+발행 전 `VERSION`을 올린다. `release.sh`는 `--replace` 없이는 기존 태그를 덮어쓰지 않는다.
 
 ## 모드
 
