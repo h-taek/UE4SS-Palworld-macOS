@@ -81,6 +81,9 @@ if gh release view "$TAG" >/dev/null 2>&1; then
 fi
 
 # Pin the tag to the exact local commit and push it (carries needed objects).
+# We push the tag FIRST so `gh release create` attaches to the existing remote
+# tag. Passing --target here instead makes gh try to create the tag ref via the
+# API, which fails with a misleading "workflow scope" error — so we don't.
 if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
     git tag -a "$TAG" -m "UE4SS-Palworld-macOS $TAG"
 fi
@@ -88,7 +91,6 @@ git push origin "$TAG"
 
 gh release create "$TAG" "$ZIP#UE4SS_mac.zip" \
     --title "$TAG" \
-    --target "$(git rev-parse HEAD)" \
     "${NOTES_ARGS[@]}"
 
 echo "Published $TAG"
